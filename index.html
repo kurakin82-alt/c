@@ -210,11 +210,23 @@
             </select>
           </div>
         </div>
+
+        <div class="optional-field" style="margin-top:10px;">
+          <label>Пиковая нагрузка (осмотров в час, необязательно)</label>
+          <input type="number" min="1" id="simplified-hourlyPeak" placeholder="Оставьте пустым для автоматического расчета">
+          <div class="manual-calculation">Если не заполнить, пиковая нагрузка рассчитается автоматически исходя из суточного количества осмотров. 1 прибор обслуживает до 30 осмотров в час.</div>
+        </div>
+
+        <div class="optional-field">
+          <label>Количество точек выхода (необязательно)</label>
+          <input type="number" min="1" id="simplified-points" placeholder="Оставьте пустым, если точка одна">
+          <div class="manual-calculation">Укажите количество точек, если их несколько. Это будет отражено в итоговом КП.</div>
+        </div>
         
         <div class="optional-field">
           <label>Количество приборов (необязательно)</label>
           <input type="number" min="1" id="simplified-devices" placeholder="Оставьте пустым для автоматического расчета">
-          <div class="manual-calculation">Если не заполнить, количество приборов рассчитается автоматически исходя из нагрузки (1 прибор = 30 осмотров в час)</div>
+          <div class="manual-calculation">Если не заполнить, количество приборов рассчитается автоматически исходя из пиковой нагрузки (1 прибор = 30 осмотров в час)</div>
         </div>
         
         <label>График работы *</label>
@@ -268,6 +280,11 @@ let currentAdjustment = 0; // Глобальная переменная для �
 // Внутреннее логирование только в консоль браузера
 function logDebug(message) {
   console.log(`[DEBUG] ${message}`);
+}
+
+// Округление до целых рублей (без копеек)
+function fmt(n) {
+  return Math.round(n).toLocaleString('ru-RU');
 }
 
 // Функция для отображения ошибки
@@ -657,21 +674,21 @@ function calculateDetailedCost() {
     
     // 9. Детали расчета
     let costBreakdown = `
-      Исходная стоимость точки: ${pointCost.toLocaleString()} ₽<br>
-      Постоянные расходы: ${fixedCost.toLocaleString()} ₽ (${devicesNeeded} приб. × ${pricing.fixedCostPerDevice.toLocaleString()} ₽)<br>
-      Переменные расходы: ${variableCost.toLocaleString()} ₽ (${monthlyChecks.toLocaleString()} осм × ${pricing.variableCostPerCheck} ₽)<br>
-      Себестоимость: ${totalCostPoint.toLocaleString()} ₽<br>
-      Маржа (${margin}%): ${(pointCost - totalCostPoint).toLocaleString()} ₽
+      Исходная стоимость точки: ${fmt(pointCost)} ₽<br>
+      Постоянные расходы: ${fmt(fixedCost)} ₽ (${devicesNeeded} приб. × ${fmt(pricing.fixedCostPerDevice)} ₽)<br>
+      Переменные расходы: ${fmt(variableCost)} ₽ (${monthlyChecks.toLocaleString()} осм × ${pricing.variableCostPerCheck} ₽)<br>
+      Себестоимость: ${fmt(totalCostPoint)} ₽<br>
+      Маржа (${margin}%): ${fmt(pointCost - totalCostPoint)} ₽
     `;
     
     if (currentAdjustment !== 0) {
-      costBreakdown += `<br><strong>Корректировка (${currentAdjustment > 0 ? '+' : ''}${currentAdjustment}%): ${((adjustedPointCost - pointCost)).toLocaleString()} ₽</strong><br>`;
-      costBreakdown += `<strong>Итоговая стоимость с корректировкой: ${adjustedPointCost.toLocaleString()} ₽</strong>`;
+      costBreakdown += `<br><strong>Корректировка (${currentAdjustment > 0 ? '+' : ''}${currentAdjustment}%): ${fmt(adjustedPointCost - pointCost)} ₽</strong><br>`;
+      costBreakdown += `<strong>Итоговая стоимость с корректировкой: ${fmt(adjustedPointCost)} ₽</strong>`;
     } else {
-      costBreakdown += `<br><strong>Итоговая стоимость: ${pointCost.toLocaleString()} ₽</strong>`;
+      costBreakdown += `<br><strong>Итоговая стоимость: ${fmt(pointCost)} ₽</strong>`;
     }
     
-    costBreakdown += `<br><strong>Стоимость одного прибора для клиента: ${adjustedCostPerDevice.toLocaleString()} ₽/мес</strong>`;
+    costBreakdown += `<br><strong>Стоимость одного прибора для клиента: ${fmt(adjustedCostPerDevice)} ₽/мес</strong>`;
     
     rows.push({
       addr, dailyChecks, hourlyPeak, devicesNeeded, monthlyChecks, 
@@ -733,8 +750,9 @@ function calculateSimplifiedCost() {
   const period = document.getElementById('simplified-period').value;
   const manualDevices = parseInt(document.getElementById('simplified-devices').value) || 0;
   const schedule = parseInt(document.getElementById('simplified-schedule').value) || 6;
+  const simplifiedPoints = parseInt(document.getElementById('simplified-points').value) || 0;
   
-  logDebug(`Параметры расчета: осмотров=${checks}, период=${period}, приборов(ручн)=${manualDevices}, график=${schedule} дней/нед`);
+  logDebug(`Параметры расчета: осмотров=${checks}, период=${period}, приборов(ручн)=${manualDevices}, график=${schedule} дней/нед, точек=${simplifiedPoints}`);
   
   if (checks <= 0) throw new Error('Количество осмотров должно быть больше 0');
   
@@ -775,10 +793,27 @@ function calculateSimplifiedCost() {
   
   if (monthlyChecks <= 0) throw new Error('Некорректное количество осмотров для расчета');
   
-  // Рассчитываем пиковую нагрузку (10 рабочих часов в день)
-  const hourlyPeak = Math.max(1, Math.ceil(dailyChecks / 10));
-  logDebug(`Пиковая нагрузка: ${hourlyPeak} осмотров в час`);
-  
+  // Читаем пиковую нагрузку из поля ввода (необязательное поле)
+  const hourlyPeakInput = parseInt(document.getElementById('simplified-hourlyPeak').value) || 0;
+  const MAX_WORKING_HOURS = 10;
+  let hourlyPeak;
+  if (hourlyPeakInput > 0) {
+    hourlyPeak = hourlyPeakInput;
+    logDebug(`Пиковая нагрузка (вручную): ${hourlyPeak} осмотров в час`);
+    // Проверка физической возможности
+    const maxPossibleDailyChecks = hourlyPeak * MAX_WORKING_HOURS;
+    if (dailyChecks > maxPossibleDailyChecks) {
+      throw new Error(`При пиковой нагрузке ${hourlyPeak} осм/час невозможно выполнить ${dailyChecks} осмотров за день. Максимум: ${maxPossibleDailyChecks} осмотров.`);
+    }
+    const minRequiredPeak = Math.ceil(dailyChecks / MAX_WORKING_HOURS);
+    if (hourlyPeak < minRequiredPeak) {
+      throw new Error(`При ${dailyChecks} осмотрах в день минимальная пиковая нагрузка должна быть не менее ${minRequiredPeak} осм/час. Текущий пик: ${hourlyPeak} осм/час.`);
+    }
+  } else {
+    hourlyPeak = Math.max(1, Math.ceil(dailyChecks / MAX_WORKING_HOURS));
+    logDebug(`Пиковая нагрузка (автоматически): ${hourlyPeak} осмотров в час`);
+  }
+
   // Рассчитываем необходимое количество приборов
   let devicesNeeded;
   let calculationMethod;
@@ -830,27 +865,36 @@ function calculateSimplifiedCost() {
   
   // 8. Детали расчета
   let costBreakdown = `
-    Исходная стоимость точки: ${pointCost.toLocaleString()} ₽<br>
-    Постоянные расходы: ${fixedCost.toLocaleString()} ₽ (${devicesNeeded} приб. × ${pricing.fixedCostPerDevice.toLocaleString()} ₽)<br>
-    Переменные расходы: ${variableCost.toLocaleString()} ₽ (${monthlyChecks.toLocaleString()} осм × ${pricing.variableCostPerCheck} ₽)<br>
-    Себестоимость: ${totalCostPoint.toLocaleString()} ₽<br>
-    Маржа (${margin}%): ${(pointCost - totalCostPoint).toLocaleString()} ₽
+    Исходная стоимость точки: ${fmt(pointCost)} ₽<br>
+    Постоянные расходы: ${fmt(fixedCost)} ₽ (${devicesNeeded} приб. × ${fmt(pricing.fixedCostPerDevice)} ₽)<br>
+    Переменные расходы: ${fmt(variableCost)} ₽ (${monthlyChecks.toLocaleString()} осм × ${pricing.variableCostPerCheck} ₽)<br>
+    Себестоимость: ${fmt(totalCostPoint)} ₽<br>
+    Маржа (${margin}%): ${fmt(pointCost - totalCostPoint)} ₽
   `;
   
   if (currentAdjustment !== 0) {
-    costBreakdown += `<br><strong>Корректировка (${currentAdjustment > 0 ? '+' : ''}${currentAdjustment}%): ${((adjustedPointCost - pointCost)).toLocaleString()} ₽</strong><br>`;
-    costBreakdown += `<strong>Итоговая стоимость с корректировкой: ${adjustedPointCost.toLocaleString()} ₽</strong>`;
+    costBreakdown += `<br><strong>Корректировка (${currentAdjustment > 0 ? '+' : ''}${currentAdjustment}%): ${fmt(adjustedPointCost - pointCost)} ₽</strong><br>`;
+    costBreakdown += `<strong>Итоговая стоимость с корректировкой: ${fmt(adjustedPointCost)} ₽</strong>`;
   } else {
-    costBreakdown += `<br><strong>Итоговая стоимость: ${pointCost.toLocaleString()} ₽</strong>`;
+    costBreakdown += `<br><strong>Итоговая стоимость: ${fmt(pointCost)} ₽</strong>`;
   }
   
-  costBreakdown += `<br><strong>Стоимость одного прибора для клиента: ${adjustedCostPerDevice.toLocaleString()} ₽/мес</strong>`;
+  costBreakdown += `<br><strong>Стоимость одного прибора для клиента: ${fmt(adjustedCostPerDevice)} ₽/мес</strong>`;
   
   logDebug(`Расчет стоимости: постоянные=${fixedCost}, переменные=${variableCost}, себестоимость=${totalCostPoint}, маржа=${margin}%, итого=${pointCost}, цена за осмотр=${costPerCheck.toFixed(2)}, цена за прибор=${costPerDevice.toFixed(2)}, корректировка=${currentAdjustment}%`);
   
+  // Формируем название точки в зависимости от указанного количества
+  let addrLabel;
+  if (simplifiedPoints > 0) {
+    const pointWord = simplifiedPoints === 1 ? 'точка выхода' : (simplifiedPoints < 5 ? 'точки выхода' : 'точек выхода');
+    addrLabel = `${simplifiedPoints} ${pointWord}`;
+  } else {
+    addrLabel = 'Единая точка';
+  }
+
   // Создаем одну точку для отображения в результатах
   const rows = [{
-    addr: 'Единая точка (упрощенный расчет)',
+    addr: addrLabel,
     dailyChecks: dailyChecks,
     hourlyPeak: hourlyPeak,
     devicesNeeded: devicesNeeded,
@@ -917,16 +961,16 @@ function displayResults(calculation, isRecalculation = false) {
         <td>${row.devicesNeeded} <small>(${row.calculationMethod})</small></td>
         <td id="mrow-${i}-checks-display">${row.monthlyChecks.toLocaleString()}</td>
         <td>
-          ${adjustment !== 0 ? `<span class="original-cost">${row.pointCost.toLocaleString()} ₽</span>` : ''}
-          <span class="adjusted-cost" id="mrow-${i}-point">${row.adjustedPointCost.toLocaleString()} ₽</span>
+          ${adjustment !== 0 ? `<span class="original-cost">${fmt(row.pointCost)} ₽</span>` : ''}
+          <span class="adjusted-cost" id="mrow-${i}-point">${fmt(row.adjustedPointCost)} ₽</span>
         </td>
         <td>
           ${adjustment !== 0 ? `<span class="original-cost">${row.costPerCheck.toFixed(2)} ₽</span>` : ''}
           <span class="adjusted-cost" id="mrow-${i}-check">${row.adjustedCostPerCheck.toFixed(2)} ₽</span>
         </td>
         <td>
-          ${adjustment !== 0 ? `<span class="original-cost">${row.costPerDevice.toLocaleString()} ₽</span>` : ''}
-          <span class="adjusted-cost" id="mrow-${i}-device">${row.adjustedCostPerDevice.toLocaleString()} ₽</span>
+          ${adjustment !== 0 ? `<span class="original-cost">${fmt(row.costPerDevice)} ₽</span>` : ''}
+          <span class="adjusted-cost" id="mrow-${i}-device">${fmt(row.adjustedCostPerDevice)} ₽</span>
         </td>
       </tr>
       <tr id="mrow-${i}-override" style="display:none;background:#f9fbff;">
@@ -1057,8 +1101,8 @@ function displayResults(calculation, isRecalculation = false) {
       <div class="margin-info">
         <strong>Корректировка стоимости:</strong> 
         <span class="${adjustment > 0 ? 'surcharge-highlight' : 'discount-highlight'}">${adjustment > 0 ? '+' : ''}${adjustment}% (${adjustment > 0 ? 'наценка' : 'скидка'})</span><br>
-        <strong>Исходная стоимость:</strong> ${totalOriginalCost.toLocaleString()} ₽/мес<br>
-        <strong>Скорректированная стоимость:</strong> ${totalCost.toLocaleString()} ₽/мес
+        <strong>Исходная стоимость:</strong> ${fmt(totalOriginalCost)} ₽/мес<br>
+        <strong>Скорректированная стоимость:</strong> ${fmt(totalCost)} ₽/мес
       </div>
     `;
   }
@@ -1075,19 +1119,19 @@ function displayResults(calculation, isRecalculation = false) {
         ${adjustment !== 0 ? `<span class="original-cost">${originalAvgPricePerCheck.toFixed(2)} ₽</span>` : ''}
         <span class="adjusted-cost" id="minfo-check">${avgPricePerCheck.toFixed(2)} ₽</span><br>
       <strong>Стоимость одного прибора для клиента:</strong> 
-        ${adjustment !== 0 ? `<span class="original-cost">${(totalOriginalCost / totalDevices).toLocaleString()} ₽/мес</span>` : ''}
-        <span class="adjusted-cost" id="minfo-device">${avgDeviceCost.toLocaleString()} ₽/мес</span>
+        ${adjustment !== 0 ? `<span class="original-cost">${fmt(totalOriginalCost / totalDevices)} ₽/мес</span>` : ''}
+        <span class="adjusted-cost" id="minfo-device">${fmt(avgDeviceCost)} ₽/мес</span>
     </div>
     
     <h2>Расчет коммерческого предложения</h2>
     
     <div class="highlight">
       <div class="total-cost">
-        ${adjustment !== 0 ? `<span class="original-cost">Исходная стоимость: ${totalOriginalCost.toLocaleString()} ₽/мес</span><br>` : ''}
-        Итоговая стоимость: <span class="adjusted-cost" id="msum-total">${totalCost.toLocaleString()} ₽/мес</span>
+        ${adjustment !== 0 ? `<span class="original-cost">Исходная стоимость: ${fmt(totalOriginalCost)} ₽/мес</span><br>` : ''}
+        Итоговая стоимость: <span class="adjusted-cost" id="msum-total">${fmt(totalCost)} ₽/мес</span>
       </div>
       <div>Всего приборов: ${totalDevices} шт.</div>
-      <div>Стоимость одного прибора: <span class="adjusted-cost" id="msum-device">${avgDeviceCost.toLocaleString()} ₽/мес</span></div>
+      <div>Стоимость одного прибора: <span class="adjusted-cost" id="msum-device">${fmt(avgDeviceCost)} ₽/мес</span></div>
       <div>Общий объем осмотров: <span id="msum-checks">${totalMonthlyChecks.toLocaleString()}</span> в месяц</div>
       <div>Средняя цена за осмотр: 
         ${adjustment !== 0 ? `<span class="original-cost">${originalAvgPricePerCheck.toFixed(2)} ₽</span>` : ''}
@@ -1117,7 +1161,7 @@ function displayResults(calculation, isRecalculation = false) {
     <table>
       <thead>
         <tr>
-          <th>Точка выхода</th>
+          <th>Точки выхода</th>
           <th>Осмотров в день</th>
           <th>Пик в час</th>
           <th>Приборов</th>
@@ -1148,7 +1192,9 @@ function displayResults(calculation, isRecalculation = false) {
       • Обслуживание оборудования и техническая поддержка 24/7<br>
       • Услуги медицинских работников и лицензионное сопровождение<br>
       • Интеграция с вашими системами учета и отчетность<br>
-      • Обучение сотрудников работе с оборудованием
+      • Обучение сотрудников работе с оборудованием<br>
+      • <strong>Стоимость фиксирована и является финальной — никаких скрытых платежей и дополнительных расходов</strong><br>
+      • <strong>Покупать оборудование не нужно — приборы предоставляются в аренду на весь срок действия договора</strong>
     </div>
     
     <div class="warning">
@@ -1571,7 +1617,7 @@ document.getElementById("downloadpdf").addEventListener('click', function() {
                 style: 'tableHeader',
                 bold: true
               }, {
-                text: `${d.totalCost.toLocaleString()} ₽/месяц`,
+                text: `${Math.round(d.totalCost).toLocaleString()} ₽/месяц`,
                 style: 'tableTotal',
                 bold: true
               }]
@@ -1591,7 +1637,7 @@ document.getElementById("downloadpdf").addEventListener('click', function() {
             widths: ['30%', '15%', '15%', '20%', '20%'],
             body: [
               [{
-                text: 'Наименование точки',
+                text: 'Точки выхода',
                 style: 'tableHeader'
               }, {
                 text: 'Осмотров/день',
@@ -1610,8 +1656,8 @@ document.getElementById("downloadpdf").addEventListener('click', function() {
                 row.addr,
                 row.dailyChecks,
                 row.devicesNeeded,
-                `${row.adjustedPointCost.toLocaleString()} ₽/мес`,
-                `${row.adjustedCostPerDevice.toLocaleString()} ₽/мес`
+                `${Math.round(row.adjustedPointCost).toLocaleString()} ₽/мес`,
+                `${Math.round(row.adjustedCostPerDevice).toLocaleString()} ₽/мес`
               ])
             ]
           },
@@ -1630,7 +1676,9 @@ document.getElementById("downloadpdf").addEventListener('click', function() {
             'Оплата осуществляется ежемесячно по факту предоставления услуг',
             'Срок поставки и установки оборудования: 5 рабочих дней с момента подписания договора',
             'Обучение сотрудников работе с оборудованием проводится бесплатно',
-            'Техническая поддержка осуществляется круглосуточно'
+            'Техническая поддержка осуществляется круглосуточно',
+            'Стоимость, указанная в настоящем коммерческом предложении, является фиксированной и финальной — никаких скрытых платежей и дополнительных расходов не предусмотрено',
+            'Приобретать оборудование не требуется — приборы предоставляются в аренду на весь срок действия договора'
           ],
           style: 'paragraph',
           margin: [0, 0, 0, 10]
@@ -1705,7 +1753,7 @@ document.getElementById("downloadpdf").addEventListener('click', function() {
           image: 'stamp',
           width: 280,
           opacity: 0.9,
-          absolutePosition: { x: 330, y: 495 }
+          absolutePosition: { x: 330, y: 547 }
         }
       ],
       styles: {
