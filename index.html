@@ -180,14 +180,14 @@
     <!-- Упрощенный расчет -->
     <div class="tab-content" id="simplified-tab" style="display:none;">
       <div class="box">
-        <label>Ваше имя *</label>
-        <input type="text" id="simplified-name" required>
+        <label>Ваше имя</label>
+        <input type="text" id="simplified-name">
         
-        <label>Телефон / Email *</label>
-        <input type="text" id="simplified-contact" required>
+        <label>Телефон / Email</label>
+        <input type="text" id="simplified-contact">
         
-        <label>Тип транспорта *</label>
-        <select id="simplified-transportType" required>
+        <label>Тип транспорта</label>
+        <select id="simplified-transportType">
           <option value="">Выберите тип</option>
           <option value="cargo">Грузовой транспорт (до 3.5т)</option>
           <option value="truck">Грузовой транспорт (свыше 3.5т)</option>
@@ -742,9 +742,7 @@ function calculateSimplifiedCost() {
   
   logDebug(`Данные клиента: имя=${name}, контакты=${contact}, тип транспорта=${transportType}`);
   
-  if (!name) throw new Error('Пожалуйста, укажите ваше имя');
-  if (!contact) throw new Error('Пожалуйста, укажите ваш телефон или email');
-  if (!transportType) throw new Error('Пожалуйста, выберите тип транспорта');
+
   
   const checks = parseInt(document.getElementById('simplified-checks').value) || 0;
   const period = document.getElementById('simplified-period').value;
@@ -960,17 +958,17 @@ function displayResults(calculation, isRecalculation = false) {
         <td>${row.hourlyPeak}</td>
         <td>${row.devicesNeeded} <small>(${row.calculationMethod})</small></td>
         <td id="mrow-${i}-checks-display">${row.monthlyChecks.toLocaleString()}</td>
-        <td>
-          ${adjustment !== 0 ? `<span class="original-cost">${fmt(row.pointCost)} ₽</span>` : ''}
-          <span class="adjusted-cost" id="mrow-${i}-point">${fmt(row.adjustedPointCost)} ₽</span>
-        </td>
-        <td>
+        <td class="col-check">
           ${adjustment !== 0 ? `<span class="original-cost">${row.costPerCheck.toFixed(2)} ₽</span>` : ''}
           <span class="adjusted-cost" id="mrow-${i}-check">${row.adjustedCostPerCheck.toFixed(2)} ₽</span>
         </td>
-        <td>
+        <td class="col-device">
           ${adjustment !== 0 ? `<span class="original-cost">${fmt(row.costPerDevice)} ₽</span>` : ''}
           <span class="adjusted-cost" id="mrow-${i}-device">${fmt(row.adjustedCostPerDevice)} ₽</span>
+        </td>
+        <td>
+          ${adjustment !== 0 ? `<span class="original-cost">${fmt(row.pointCost)} ₽</span>` : ''}
+          <span class="adjusted-cost" id="mrow-${i}-point">${fmt(row.adjustedPointCost)} ₽</span>
         </td>
       </tr>
       <tr id="mrow-${i}-override" style="display:none;background:#f9fbff;">
@@ -984,13 +982,13 @@ function displayResults(calculation, isRecalculation = false) {
                 oninput="applyManualPrices('row')">
             </div>
             <div>
-              <label style="font-size:11px;color:#555;">Цена за осмотр (₽)</label>
+              <label style="font-size:11px;color:#555;">Стоимость одного осмотра (₽)</label>
               <input type="number" id="mrow-${i}-in-check" min="0" step="0.01" placeholder="авто"
                 style="width:120px;display:block;margin-top:3px;font-size:12px;"
                 oninput="applyManualPrices('row')">
             </div>
             <div>
-              <label style="font-size:11px;color:#555;">Цена за прибор (₽/мес)</label>
+              <label style="font-size:11px;color:#555;">Стоимость услуг на 1 прибор (₽/мес)</label>
               <input type="number" id="mrow-${i}-in-device" min="0" step="1" placeholder="авто"
                 style="width:130px;display:block;margin-top:3px;font-size:12px;"
                 oninput="applyManualPrices('row')">
@@ -1158,6 +1156,26 @@ function displayResults(calculation, isRecalculation = false) {
     ${extra ? `<p><strong>Дополнительные требования:</strong> ${extra}</p>` : ''}
     
     <h3>Детализация по точкам</h3>
+
+    <div style="margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:13px; color:#555; font-weight:bold;">Показывать в КП:</span>
+      <button id="btn-col-check"
+        onclick="togglePricingCol('check')"
+        title="Включить/выключить столбец &laquo;Стоимость одного осмотра&raquo;"
+        style="padding:5px 14px; border:none; border-radius:16px; cursor:pointer;
+               background:#1a5fa8; color:#fff; font-size:12px; transition:background 0.2s;">
+        ✓ Стоимость одного осмотра
+      </button>
+      <button id="btn-col-device"
+        onclick="togglePricingCol('device')"
+        title="Включить/выключить столбец &laquo;Стоимость услуг на 1 прибор/мес&raquo;"
+        style="padding:5px 14px; border:none; border-radius:16px; cursor:pointer;
+               background:#1a5fa8; color:#fff; font-size:12px; transition:background 0.2s;">
+        ✓ Стоимость на 1 прибор/мес
+      </button>
+      <span style="font-size:11px; color:#999;">— нажмите, чтобы включить/выключить столбец</span>
+    </div>
+
     <table>
       <thead>
         <tr>
@@ -1166,13 +1184,23 @@ function displayResults(calculation, isRecalculation = false) {
           <th>Пик в час</th>
           <th>Приборов</th>
           <th>Осмотров в месяц</th>
-          <th>Стоимость по точке</th>
-          <th>Цена за осмотр</th>
-          <th>Цена за прибор</th>
+          <th class="col-check">Стоимость одного осмотра</th>
+          <th class="col-device">Стоимость услуг в расчёте на 1 прибор/мес</th>
+          <th>${activeTab === 'simplified' ? 'Общая стоимость в месяц' : 'Стоимость по точке'}</th>
         </tr>
       </thead>
       <tbody>
         ${rowsHtml}
+        <tr style="background:#e4f3fa; font-weight:bold; border-top:2px solid #169;">
+          <td id="itogo-span-cell" colspan="7" style="text-align:right; padding:10px;">
+            Итого к оплате в месяц
+            <span style="font-weight:normal; font-size:0.88em; color:#555;"> (окончательная стоимость — без скрытых платежей и доплат)</span>
+          </td>
+          <td style="padding:10px; color:#169; font-size:1.05em;">
+            ${adjustment !== 0 ? `<span class="original-cost">${fmt(totalOriginalCost)} ₽</span><br>` : ''}
+            <span id="mtable-total">${fmt(totalCost)} ₽</span>
+          </td>
+        </tr>
       </tbody>
     </table>
     
@@ -1215,13 +1243,13 @@ function displayResults(calculation, isRecalculation = false) {
             oninput="applyManualPrices('checks')">
         </div>
         <div>
-          <label style="font-size:12px;">Цена за осмотр (₽)</label>
+          <label style="font-size:12px;">Стоимость одного осмотра (₽)</label>
           <input type="number" id="manual-price-check" min="0" step="0.01" placeholder="авто"
             style="width:130px;display:block;margin-top:4px;"
             oninput="applyManualPrices('check')">
         </div>
         <div>
-          <label style="font-size:12px;">Цена за прибор (₽/мес)</label>
+          <label style="font-size:12px;">Стоимость услуг на 1 прибор (₽/мес)</label>
           <input type="number" id="manual-price-device" min="0" step="1" placeholder="авто"
             style="width:130px;display:block;margin-top:4px;"
             oninput="applyManualPrices('device')">
@@ -1240,6 +1268,9 @@ function displayResults(calculation, isRecalculation = false) {
   document.getElementById("result").innerHTML = kpHtml;
   document.getElementById("result").style.display = "block";
   document.getElementById("downloadpdf").style.display = "block";
+  
+  // Применяем текущее состояние видимости колонок
+  updatePricingCols();
   
   // Сохраняем данные для PDF
   window.kpData = {
@@ -1274,6 +1305,42 @@ function clearRowOverride(i) {
   });
   applyManualPrices('row');
 }
+
+// ─── Управление видимостью ценовых колонок ───────────────────────────────────
+window.colCheckVisible  = true;   // «Стоимость одного осмотра»
+window.colDeviceVisible = true;   // «Стоимость услуг на 1 прибор/мес»
+
+function togglePricingCol(col) {
+  if (col === 'check') {
+    if (window.colCheckVisible && !window.colDeviceVisible) return; // нельзя скрыть обе
+    window.colCheckVisible = !window.colCheckVisible;
+  } else {
+    if (window.colDeviceVisible && !window.colCheckVisible) return;
+    window.colDeviceVisible = !window.colDeviceVisible;
+  }
+  updatePricingCols();
+}
+
+function updatePricingCols() {
+  const showCheck  = window.colCheckVisible;
+  const showDevice = window.colDeviceVisible;
+
+  // Скрываем / показываем ячейки
+  document.querySelectorAll('.col-check').forEach(el  => { el.style.display = showCheck  ? '' : 'none'; });
+  document.querySelectorAll('.col-device').forEach(el => { el.style.display = showDevice ? '' : 'none'; });
+
+  // Обновляем colspan строки «Итого»
+  const colspan = 7 - (showCheck ? 0 : 1) - (showDevice ? 0 : 1);
+  const spanCell = document.getElementById('itogo-span-cell');
+  if (spanCell) spanCell.setAttribute('colspan', colspan);
+
+  // Обновляем стиль кнопок
+  const btnC = document.getElementById('btn-col-check');
+  const btnD = document.getElementById('btn-col-device');
+  if (btnC) { btnC.style.background = showCheck  ? '#1a5fa8' : '#ccc'; btnC.style.color = showCheck  ? '#fff' : '#555'; }
+  if (btnD) { btnD.style.background = showDevice ? '#1a5fa8' : '#ccc'; btnD.style.color = showDevice ? '#fff' : '#555'; }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Ручная корректировка цен после расчёта
 // Приоритет: индивидуальные поля строки > общие поля > авто
@@ -1561,201 +1628,170 @@ document.getElementById("downloadpdf").addEventListener('click', function() {
           margin: [40, 10, 40, 5]
         };
       },
-      content: [
+      content: (() => {
+        const n  = d.rows.length;
+        // Единый масштаб: 1.0 при n≤2, -3.5% за каждую точку сверх 2, минимум 0.68
+        const S  = Math.max(0.68, 1.0 - Math.max(0, n - 2) * 0.035);
+        const fs = base => Math.max(6, Math.round(base * S));
+        const sm = v    => Math.max(0, Math.round(v * S));
+        const sp = arr  => arr.map(v => Math.max(0, Math.round(v * S)));
+
+        return [
         {
           stack: buildRecipientLines(d.orgName, d.recipient, d.recipientFIO).map(line => ({
             text: line,
-            style: 'recipient',
+            fontSize: fs(10), bold: true, color: '#555',
             alignment: 'right'
           })),
-          margin: [0, 0, 0, 10]
+          margin: [0, 0, 0, sm(8)]
         },
         {
           text: 'ООО "ЦЕНТР ДИАГНОСТИКИ И МОНИТОРИНГА" ФИЛИАЛ СИБИРЬ (ООО «ЦДМ»)',
-          style: 'companyTitle',
-          alignment: 'center',
-          margin: [0, 0, 0, 5]
+          fontSize: fs(13), bold: true, alignment: 'center',
+          margin: [0, 0, 0, sm(3)]
         },
         {
           text: 'КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ',
-          style: 'offerTitle',
-          alignment: 'center',
-          margin: [0, 0, 0, 10]
+          fontSize: fs(15), bold: true, color: '#116699', alignment: 'center',
+          margin: [0, 0, 0, sm(7)]
         },
         {
           text: 'ООО "ЦЕНТР ДИАГНОСТИКИ И МОНИТОРИНГА" ФИЛИАЛ СИБИРЬ (ООО «ЦДМ») предлагает услуги по проведению предрейсовых/послерейсовых медицинских осмотров в 2026 году на следующих условиях:',
-          style: 'paragraph',
-          margin: [0, 0, 0, 10]
+          fontSize: fs(10), lineHeight: 1.2,
+          margin: [0, 0, 0, sm(6)]
         },
         {
           table: {
             widths: ['*', '*'],
             body: [
-              [{
-                text: 'Тип транспорта',
-                style: 'tableHeader'
-              }, {
-                text: getTransportTypeText(d.transportType),
-                style: 'tableContent'
-              }],
-              [{
-                text: 'Общий объем осмотров в месяц',
-                style: 'tableHeader'
-              }, {
-                text: `${d.totalMonthlyChecks.toLocaleString()} осмотров`,
-                style: 'tableContent'
-              }],
-              [{
-                text: 'Количество приборов',
-                style: 'tableHeader'
-              }, {
-                text: `${d.totalDevices} единиц`,
-                style: 'tableContent'
-              }],
-              [{
-                text: 'ИТОГОВАЯ СТОИМОСТЬ',
-                style: 'tableHeader',
-                bold: true
-              }, {
-                text: `${Math.round(d.totalCost).toLocaleString()} ₽/месяц`,
-                style: 'tableTotal',
-                bold: true
-              }]
+              [{text:'Тип транспорта',               bold:true, fillColor:'#f0f0f0', fontSize:fs(9), margin:sp([3,3,3,3])}, {text:getTransportTypeText(d.transportType),             fontSize:fs(10), margin:sp([3,2,3,2])}],
+              [{text:'Общий объем осмотров в месяц', bold:true, fillColor:'#f0f0f0', fontSize:fs(9), margin:sp([3,3,3,3])}, {text:`${d.totalMonthlyChecks.toLocaleString()} осмотров`, fontSize:fs(10), margin:sp([3,2,3,2])}],
+              [{text:'Количество приборов',           bold:true, fillColor:'#f0f0f0', fontSize:fs(9), margin:sp([3,3,3,3])}, {text:`${d.totalDevices} единиц`,                         fontSize:fs(10), margin:sp([3,2,3,2])}],
+              [{text:'ИТОГОВАЯ СТОИМОСТЬ',            bold:true, fillColor:'#f0f0f0', fontSize:fs(9), margin:sp([3,3,3,3])}, {text:`${Math.round(d.totalCost).toLocaleString()} ₽/месяц`, bold:true, color:'#116699', fontSize:fs(12), margin:sp([3,2,3,2])}]
             ]
           },
           layout: 'lightHorizontalLines',
-          margin: [0, 0, 0, 10]
+          margin: [0, 0, 0, sm(6)]
         },
         {
           text: 'Детализация услуг по точкам:',
-          style: 'sectionHeader',
-          margin: [0, 10, 0, 5]
+          fontSize: fs(11), bold: true, color: '#116699',
+          margin: [0, sm(4), 0, sm(3)]
         },
         {
           table: {
             headerRows: 1,
-            widths: ['30%', '15%', '15%', '20%', '20%'],
-            body: [
-              [{
-                text: 'Точки выхода',
-                style: 'tableHeader'
-              }, {
-                text: 'Осмотров/день',
-                style: 'tableHeader'
-              }, {
-                text: 'Приборов',
-                style: 'tableHeader'
-              }, {
-                text: 'Стоимость',
-                style: 'tableHeader'
-              }, {
-                text: 'Цена за прибор',
-                style: 'tableHeader'
-              }],
-              ...d.rows.map(row => [
-                row.addr,
-                row.dailyChecks,
-                row.devicesNeeded,
-                `${Math.round(row.adjustedPointCost).toLocaleString()} ₽/мес`,
-                `${Math.round(row.adjustedCostPerDevice).toLocaleString()} ₽/мес`
-              ])
-            ]
+            widths: (() => {
+              const both = window.colCheckVisible && window.colDeviceVisible;
+              // Когда оба столбца цен видны, сжимаем первые колонки чтобы последней хватило места
+              const c1 = both ? '24%' : '28%';
+              const c2 = both ? '10%' : '12%';
+              const c3 = both ? '10%' : '12%';
+              const w = [c1, c2, c3];
+              if (window.colCheckVisible)  w.push(both ? '14%' : '16%');
+              if (window.colDeviceVisible) w.push(both ? '17%' : '20%');
+              const used = w.reduce((s, x) => s + parseInt(x), 0);
+              w.push((100 - used) + '%');
+              return w;
+            })(),
+            body: (() => {
+              const pad    = sp([3,3,3,3]);
+              const padHdr = sp([3,4,3,4]);
+              const fsC    = fs(10);
+              const fsH    = fs(9);
+              const hdrs = [
+                {text:'Точки выхода',  bold:true, fillColor:'#f0f0f0', fontSize:fsH, margin:padHdr},
+                {text:'Осмотров/день', bold:true, fillColor:'#f0f0f0', fontSize:fsH, margin:padHdr},
+                {text:'Приборов',      bold:true, fillColor:'#f0f0f0', fontSize:fsH, margin:padHdr}
+              ];
+              if (window.colCheckVisible)  hdrs.push({text:'Стоимость одного осмотра',                   bold:true, fillColor:'#f0f0f0', fontSize:fsH, margin:padHdr});
+              if (window.colDeviceVisible) hdrs.push({text:'Стоимость услуг в расчёте на 1 прибор/мес', bold:true, fillColor:'#f0f0f0', fontSize:fsH, margin:padHdr});
+              hdrs.push({text: activeTab==='simplified' ? 'Общая стоимость в месяц' : 'Стоимость по точке', bold:true, fillColor:'#f0f0f0', fontSize:fsH, margin:padHdr});
+
+              const dataRows = d.rows.map(row => {
+                const cells = [
+                  {text:row.addr,               fontSize:fsC, margin:pad},
+                  {text:String(row.dailyChecks), fontSize:fsC, margin:pad},
+                  {text:String(row.devicesNeeded),fontSize:fsC, margin:pad}
+                ];
+                if (window.colCheckVisible)  cells.push({text:`${row.adjustedCostPerCheck.toFixed(2)} ₽`,                        fontSize:fsC, margin:pad});
+                if (window.colDeviceVisible) cells.push({text:`${Math.round(row.adjustedCostPerDevice).toLocaleString()} ₽/мес`, fontSize:fsC, margin:pad});
+                cells.push({text:`${Math.round(row.adjustedPointCost).toLocaleString()} ₽/мес`, fontSize:fsC, margin:pad});
+                return cells;
+              });
+
+              const spanCols = 3 + (window.colCheckVisible?1:0) + (window.colDeviceVisible?1:0);
+              const padTot   = sp([0,3,0,3]);
+              const totalRow = [{
+                text:'Итого к оплате в месяц (окончательная стоимость — без скрытых платежей и доплат)',
+                colSpan:spanCols, bold:true, fillColor:'#e4f3fa', fontSize:fs(9), margin:padTot
+              }];
+              for (let i=1;i<spanCols;i++) totalRow.push({});
+              totalRow.push({text:`${Math.round(d.totalCost).toLocaleString()} ₽`, bold:true, color:'#116699', fillColor:'#e4f3fa', fontSize:fs(11), margin:padTot});
+              return [hdrs, ...dataRows, totalRow];
+            })()
           },
           layout: 'lightHorizontalLines',
-          margin: [0, 0, 0, 10]
+          margin: [0, 0, 0, sm(5)]
         },
+        // ─── Условия ─────────────────────────────────────────────────────────
         {
           text: 'Условия предоставления услуги:',
-          style: 'sectionHeader',
-          margin: [0, 10, 0, 5]
+          bold: true, color: '#116699', fontSize: fs(11),
+          margin: [0, sm(4), 0, sm(2)]
         },
         {
           ul: [
-            'Техническая поддержка, обслуживание, доставка и установка предоставляются за счет ООО «ЦДМ»',
-            'Договор заключается на 12 месяцев с автоматическим продлением',
-            'Оплата осуществляется ежемесячно по факту предоставления услуг',
-            'Срок поставки и установки оборудования: 5 рабочих дней с момента подписания договора',
-            'Обучение сотрудников работе с оборудованием проводится бесплатно',
-            'Техническая поддержка осуществляется круглосуточно',
-            'Стоимость, указанная в настоящем коммерческом предложении, является фиксированной и финальной — никаких скрытых платежей и дополнительных расходов не предусмотрено',
-            'Приобретать оборудование не требуется — приборы предоставляются в аренду на весь срок действия договора'
+            {text:'Техническая поддержка, обслуживание, доставка и установка предоставляются за счет ООО «ЦДМ»', fontSize:fs(10), lineHeight:1.15},
+            {text:'Договор заключается на 12 месяцев с автоматическим продлением',                               fontSize:fs(10), lineHeight:1.15},
+            {text:'Оплата осуществляется ежемесячно по факту предоставления услуг',                              fontSize:fs(10), lineHeight:1.15},
+            {text:'Срок поставки и установки оборудования: 5 рабочих дней с момента подписания договора',        fontSize:fs(10), lineHeight:1.15},
+            {text:'Обучение сотрудников работе с оборудованием проводится бесплатно',                            fontSize:fs(10), lineHeight:1.15},
+            {text:'Техническая поддержка осуществляется круглосуточно',                                          fontSize:fs(10), lineHeight:1.15},
+            {text:'Стоимость фиксирована и является финальной — никаких скрытых платежей и доплат',              fontSize:fs(10), lineHeight:1.15},
+            {text:'Приборы предоставляются в аренду на весь срок договора — покупать не нужно',                  fontSize:fs(10), lineHeight:1.15}
           ],
-          style: 'paragraph',
-          margin: [0, 0, 0, 10]
+          margin: [0, 0, 0, sm(5)]
         },
+        // ─── Реквизиты ───────────────────────────────────────────────────────
         {
-          columns: [
+          unbreakable: true,
+          stack: [
             {
-              text: 'Реквизиты ООО «ЦДМ»:',
-              style: 'sectionHeader',
-              margin: [0, 0, 0, 3]
+              columns: [
+                {text:'Реквизиты ООО «ЦДМ»:',  bold:true, color:'#116699', fontSize:fs(10)},
+                {text:'Контактная информация:', bold:true, color:'#116699', fontSize:fs(10), alignment:'right'}
+              ],
+              margin: [0, sm(3), 0, sm(2)]
             },
             {
-              text: 'Контактная информация:',
-              style: 'sectionHeader',
-              margin: [0, 0, 0, 3],
-              alignment: 'right'
+              columns: [
+                {
+                  text: 'ИНН/КПП: 5406803431/540201001\nОГРН: 1195476091942\nЮр. адрес: 630049, Новосибирская обл., г. Новосибирск, Красный пр-кт, д. 173/1, оф. 1',
+                  fontSize: fs(8), lineHeight: 1.15
+                },
+                {
+                  text: 'Телефон: 89052226295\nEmail: centr@cdm.spb.ru',
+                  alignment: 'right', fontSize: fs(8), lineHeight: 1.15
+                }
+              ]
             }
-          ],
-          margin: [0, 10, 0, 5]
+          ]
         },
+        // ─── Подпись + печать (печать через relativePosition — не занимает высоту) ─
         {
-          columns: [
-            {
-              text: [
-                'ИНН/КПП: 5406803431/540201001\n',
-                'ОГРН: 1195476091942\n',
-                'Юридический адрес:\n',
-                '630049, Новосибирская область,\n',
-                'г. Новосибирск, Красный пр-кт,\n',
-                'д. 173/1, офис 1'
-              ],
-              style: 'paragraph',
-              fontSize: 10
-            },
-            {
-              text: [
-                'Телефон: 89052226295\n',
-                'Email: centr@cdm.spb.ru'
-              ],
-              alignment: 'right',
-              style: 'paragraph',
-              fontSize: 10
-            }
-          ],
-          margin: [0, 0, 0, 15]
-        },
-        {
-          canvas: [
-            { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#ccc' }
-          ],
-          margin: [0, 15, 0, 10]
-        },
-        {
-          text: 'С уважением,',
-          style: 'signature',
-          alignment: 'right',
-          margin: [0, 0, 0, 3]
-        },
-        {
-          text: 'Генеральный директор ООО «ЦДМ»',
-          style: 'signature',
-          alignment: 'right',
-          margin: [0, 0, 0, 3]
-        },
-        {
-          text: '___________________ / Куракин В.А. /',
-          style: 'signature',
-          alignment: 'right',
-          margin: [0, 10, 0, 0]
-        },
-        {
-          image: 'stamp',
-          width: 280,
-          opacity: 0.9,
-          absolutePosition: { x: 330, y: 547 }
+          unbreakable: true,
+          stack: [
+            {canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:0.5,lineColor:'#ccc'}], margin:[0,sm(5),0,sm(4)]},
+            {text:'С уважением,',                        fontSize:fs(10), alignment:'right', margin:[0,0,0,sm(1)]},
+            {text:'Генеральный директор ООО «ЦДМ»',      fontSize:fs(10), alignment:'right', margin:[0,0,0,sm(1)]},
+            {text:'___________________ / Куракин В.А. /', fontSize:fs(10), alignment:'right', margin:[0,sm(7),0,0]},
+            // relativePosition: элемент рисуется поверх текста, не сдвигая поток
+            {image:'stamp', width:260, opacity:0.85, relativePosition:{x:255, y:-108}}
+          ]
         }
-      ],
+        ]; // конец return
+      })(),
       styles: {
         documentNumber: {
           fontSize: 10,
